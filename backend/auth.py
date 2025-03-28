@@ -2,7 +2,7 @@
 from fastapi import Depends, HTTPException, Security, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from backend.security import check_rate_limit, record_session, encrypt_data, decrypt_data, JWTBearer
-from fastapi.middleware.security import SecurityMiddleware
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
