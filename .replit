@@ -1,4 +1,4 @@
-modules = ["web", "python-3.12", "nix"]
+modules = ["web", "python-3.12"]
 run = "uvicorn undefined:app --host 0.0.0.0 --port 3000"
 
 [nix]
