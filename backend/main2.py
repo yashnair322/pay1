@@ -59,19 +59,30 @@ class Bot:
             return
 
     try:
-        # Use IDLE command if supported by the server
-        try:
-            bot.imap_session.select('INBOX')
-            status, messages = bot.imap_session.sort('REVERSE DATE', 'UTF-8', 'UNSEEN')
-        except Exception as e:
-            status, messages = bot.imap_session.search(None, "(UNSEEN)")
-
+        # Select inbox and search for unread messages with internal dates
+        bot.imap_session.select('INBOX')
+        status, messages = bot.imap_session.search(None, '(UNSEEN)')
+        
         if status != "OK":
             log_message(bot_name, "⚠️ IMAP search failed.")
             return
 
-        # Process messages immediately
         message_ids = messages[0].split() if isinstance(messages[0], bytes) else messages
+        
+        # Get message dates and sort by internal date
+        dated_messages = []
+        for msg_id in message_ids:
+            try:
+                _, date_data = bot.imap_session.fetch(msg_id, "(INTERNALDATE)")
+                msg_date = imaplib.Internaldate2tuple(date_data[0])
+                dated_messages.append((msg_date, msg_id))
+            except Exception as e:
+                log_message(bot_name, f"⚠️ Error getting message date: {str(e)}")
+                continue
+        
+        # Sort messages by date (oldest first)
+        dated_messages.sort(key=lambda x: x[0])
+        message_ids = [msg_id for _, msg_id in dated_messages]
         for num in message_ids:
             if bot.paused:
                 break
