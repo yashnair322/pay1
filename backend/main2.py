@@ -47,6 +47,40 @@ class Bot:
     position: str = "neutral"
     paused: bool = False  # New field to track pause state
 
+
+    # Skip paused bots
+    if bot.paused:
+        return
+
+    if not bot.imap_session:
+        log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
+        if not connect_imap(bot):
+            log_message(bot_name, "⚠️ Failed to reconnect to IMAP")
+            return
+
+    try:
+        # Use IDLE command if supported by the server
+        try:
+            bot.imap_session.select('INBOX')
+            status, messages = bot.imap_session.sort('REVERSE DATE', 'UTF-8', 'UNSEEN')
+        except Exception as e:
+            status, messages = bot.imap_session.search(None, "(UNSEEN)")
+
+        if status != "OK":
+            log_message(bot_name, "⚠️ IMAP search failed.")
+            return
+
+        # Process messages immediately
+        message_ids = messages[0].split() if isinstance(messages[0], bytes) else messages
+        for num in message_ids:
+            if bot.paused:
+                break
+            await process_email(bot, bot_name, num)
+            
+    except Exception as e:
+        log_message(bot_name, f"⚠️ Error checking emails: {str(e)}")
+        reconnect_bot(bot)
+
     # API fields for standard exchanges
     api_key: str = None
     api_secret: str = None
@@ -237,8 +271,24 @@ async def check_email_for_signals():
     # Import bot_manager at the function level to avoid circular imports
     from backend import bot_manager
 
+    # Reduce the main loop delay to check more frequently
+    check_interval = 1  # Check every second
+
     while True:
+        tasks = []
         for bot_name, bot in active_bots.items():
+            # Create a task for each bot to check emails concurrently
+            tasks.append(asyncio.create_task(check_bot_emails(bot_name, bot)))
+        
+        # Wait for all tasks to complete
+        if tasks:
+            await asyncio.gather(*tasks)
+        
+        # Short sleep to prevent excessive CPU usage
+        await asyncio.sleep(check_interval)
+
+async def check_bot_emails(bot_name: str, bot):
+    """Check emails for a single bot"""
             # Skip paused bots
             if bot.paused:
                 # Only log this once in a while to avoid spamming logs
