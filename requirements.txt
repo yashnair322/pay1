@@ -1,3 +1,4 @@
+
 fastapi
 uvicorn
 psycopg2
@@ -13,7 +14,4 @@ aiohttp
 websockets
 asyncpg
 razorpay
-razorpay
 stripe
-stripe
-razorpay
