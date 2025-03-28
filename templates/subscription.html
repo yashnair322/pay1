@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscription Plans</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="text-center mb-5">Choose Your Plan</h1>
+        <div class="row justify-content-center">
+            <!-- Free Plan -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h3>Free Plan</h3>
+                        <h2 class="my-3">₹0</h2>
+                        <ul class="list-unstyled">
+                            <li>1 Trading Bot</li>
+                            <li>4 Trades per day</li>
+                        </ul>
+                        <button onclick="activateFreePlan()" class="btn btn-primary">Activate</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Basic Plan -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h3>Basic Plan</h3>
+                        <h2 class="my-3">₹999</h2>
+                        <ul class="list-unstyled">
+                            <li>5 Trading Bots</li>
+                            <li>Unlimited Trades</li>
+                        </ul>
+                        <button onclick="subscribe('basic')" class="btn btn-primary">Subscribe</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Premium Plan -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h3>Premium Plan</h3>
+                        <h2 class="my-3">₹1999</h2>
+                        <ul class="list-unstyled">
+                            <li>6 Trading Bots</li>
+                            <li>Unlimited Trades</li>
+                        </ul>
+                        <button onclick="subscribe('premium')" class="btn btn-primary">Subscribe</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get auth token from localStorage
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+        }
+
+        function activateFreePlan() {
+            fetch('/activate-free-plan', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    localStorage.setItem('activation_message', data.message);
+                    window.location.href = '/dashboard';
+                }
+            })
+            .catch(error => {
+                alert('Error activating free plan. Please try again.');
+            });
+        }
+
+        function subscribe(planId) {
+            fetch(`/create-subscription-payment/${planId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const options = {
+                    key: data.keyId,
+                    amount: data.amount,
+                    currency: "INR",
+                    name: "Trading Bot Platform",
+                    description: "Subscription Payment",
+                    order_id: data.orderId,
+                    handler: function (response) {
+                        verifyPayment(response, planId);
+                    },
+                    prefill: {
+                        email: localStorage.getItem('userEmail')
+                    },
+                    theme: {
+                        color: "#3399cc"
+                    }
+                };
+                const rzp = new Razorpay(options);
+                rzp.open();
+            });
+        }
+
+        function verifyPayment(response, planId) {
+            fetch('/verify-payment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_signature: response.razorpay_signature,
+                    plan_id: planId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/dashboard';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
