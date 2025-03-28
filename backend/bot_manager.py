@@ -90,17 +90,61 @@ async def close_position(bot, signal):
         raise Exception(f"Failed to close position: {str(e)}")
 
 
+async def check_trading_status(bot, signal):
+    """Check if trading is allowed for the symbol on the exchange."""
+    try:
+        exchange = bot.exchange.lower()
+        
+        # Define exchange-specific status checks
+        if exchange == "binance":
+            async with aiohttp.ClientSession() as session:
+                url = "https://api.binance.com/api/v3/exchangeInfo"
+                async with session.get(url) as response:
+                    data = await response.json()
+                    for symbol_info in data["symbols"]:
+                        if symbol_info["symbol"] == signal.symbol.replace("/", ""):
+                            return symbol_info["status"] == "TRADING"
+                            
+        elif exchange == "bybit":
+            async with aiohttp.ClientSession() as session:
+                url = "https://api.bybit.com/v5/market/tickers"
+                params = {"category": "spot", "symbol": signal.symbol.replace("/", "")}
+                async with session.get(url, params=params) as response:
+                    data = await response.json()
+                    return data["retCode"] == 0 and len(data.get("result", {}).get("list", [])) > 0
+                    
+        elif exchange == "kucoin":
+            async with aiohttp.ClientSession() as session:
+                url = f"https://api.kucoin.com/api/v1/symbols"
+                async with session.get(url) as response:
+                    data = await response.json()
+                    for symbol_info in data["data"]:
+                        if symbol_info["symbol"] == signal.symbol:
+                            return symbol_info["enableTrading"]
+                            
+        # Add more exchanges as needed
+        
+        return True  # Default to True for unsupported exchanges
+    except Exception as e:
+        log_message(bot.name, f"⚠️ Error checking trading status: {str(e)}")
+        return False
+
 async def place_trade(bot, signal):
     """
     Place an order for the bot depending on the trade signal.
-    It first checks if the bot has an open position.
-    If the position is conflicting, it closes the open position and then places the new trade.
+    It first checks if trading is allowed, then handles positions and places the trade.
     """
     # Normalize the exchange name to lowercase for consistent comparison
     exchange = bot.exchange.lower()
     
     # Log the exchange type for debugging
     log_message(bot.name, f"🔍 Attempting trade with exchange: '{exchange}'")
+    
+    # Check if trading is allowed
+    trading_allowed = await check_trading_status(bot, signal)
+    if not trading_allowed:
+        log_message(bot.name, f"❌ Trading is not currently allowed for {signal.symbol} on {exchange}")
+        return {"status": "error", "message": "Trading not allowed for this symbol"}
     
     # First, check if the bot has an open position
     if bot.position in ['buy', 'sell']:

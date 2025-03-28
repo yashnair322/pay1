@@ -425,6 +425,11 @@ async def check_bot_emails(bot_name: str, bot):
 
                                 log_message(bot_name, f"""
                                 ✅ Trade executed successfully: {action.upper()} {bot.symbol}
+                                💹 Trade Details:
+                                  - Exchange: {bot.exchange}
+                                  - Symbol: {bot.symbol}
+                                  - Action: {action.upper()}
+                                  - Quantity: {bot.quantity}
                                 📅 Email Date: {date_str}  
                                 📨 Subject: {subject}  
                                 📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
