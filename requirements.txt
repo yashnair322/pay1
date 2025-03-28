@@ -18,3 +18,5 @@ stripe
 PyJWT
 PyJWT
 PyJWT
+pyotp
+qrcode

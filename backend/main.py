@@ -203,6 +203,54 @@ def reset_password(request: Request):
 def subscription_page(request: Request):
     return templates.TemplateResponse("subscription.html", {"request": request})
 
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    return templates.TemplateResponse("settings.html", {"request": request})
+
+@app.get("/api/user/profile")
+async def get_user_profile(current_user: dict = Depends(get_current_user)):
+    cursor.execute("""
+        SELECT first_name, last_name, email, subscription_status, subscription_plan,
+               (SELECT end_date FROM subscriptions WHERE user_email = users.email ORDER BY end_date DESC LIMIT 1) as subscription_end_date
+        FROM users WHERE email = %s
+    """, (current_user["email"],))
+    user_data = cursor.fetchone()
+    
+    return {
+        "first_name": user_data[0],
+        "last_name": user_data[1],
+        "email": user_data[2],
+        "subscription_status": user_data[3],
+        "subscription_plan": user_data[4],
+        "subscription_end_date": user_data[5]
+    }
+
+@app.post("/api/2fa/setup")
+async def setup_2fa(current_user: dict = Depends(get_current_user)):
+    # Generate 2FA secret and QR code
+    import pyotp
+    import qrcode
+    import base64
+    from io import BytesIO
+    
+    secret = pyotp.random_base32()
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(current_user["email"], issuer_name="TradeBot")
+    
+    # Generate QR code
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(provisioning_uri)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convert QR code to base64
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    qr_code = base64.b64encode(buffered.getvalue()).decode()
+    
+    # Store secret temporarily (you should implement proper storage)
+    return {"qr_code": f"data:image/png;base64,{qr_code}", "secret": secret}
+
 @app.get("/check-subscription-status")
 async def check_subscription_status(current_user: dict = Depends(get_current_user)):
     # For now, returning mock data. You'll need to implement actual subscription check logic

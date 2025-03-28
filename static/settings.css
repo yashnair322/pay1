@@ -1,0 +1,92 @@
+
+.settings-container {
+    padding: 30px;
+}
+
+.settings-card {
+    background-color: white;
+    border-radius: var(--border-radius);
+    padding: 24px;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 20px;
+}
+
+.nav-pills .nav-link {
+    color: var(--primary-color);
+    border-radius: var(--border-radius);
+    margin-bottom: 10px;
+    text-align: left;
+    padding: 12px 15px;
+}
+
+.nav-pills .nav-link.active {
+    background-color: var(--primary-color);
+    color: var(--text-color);
+}
+
+.nav-pills .nav-link:hover:not(.active) {
+    background-color: rgba(15, 23, 42, 0.1);
+}
+
+.form-control {
+    border-radius: var(--border-radius);
+    border: 1px solid #e2e8f0;
+    padding: 10px;
+}
+
+.form-control:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+}
+
+.btn-custom {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: var(--border-radius);
+    font-weight: 500;
+}
+
+.btn-custom:hover {
+    background-color: #2563eb;
+    color: white;
+}
+
+.current-plan-info {
+    background-color: #f8fafc;
+    padding: 20px;
+    border-radius: var(--border-radius);
+    margin: 20px 0;
+}
+
+.form-check-input {
+    width: 45px;
+    height: 24px;
+}
+
+.qr-code-container {
+    text-align: center;
+    padding: 20px;
+    background-color: #f8fafc;
+    border-radius: var(--border-radius);
+}
+
+.qr-code-container img {
+    max-width: 200px;
+}
+
+.verification-input {
+    max-width: 200px;
+}
+
+.form-switch {
+    display: flex;
+    align-items: center;
+    padding-left: 0;
+}
+
+.form-switch .form-check-input {
+    margin-left: 0;
+    margin-right: 10px;
+}
