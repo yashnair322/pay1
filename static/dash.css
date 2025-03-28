@@ -469,6 +469,64 @@ pre#logs {
 
 /* Action badges */
 .action-badge {
+
+/* Auth pages specific styles */
+.auth-page {
+    background-color: var(--primary-color);
+    color: var(--text-color);
+    min-height: 100vh;
+}
+
+.auth-page .form-container {
+    background: var(--secondary-color);
+    max-width: 500px;
+    margin: 50px auto;
+    padding: 30px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.auth-page .form-label {
+    color: var(--text-color);
+}
+
+.auth-page .text-accent {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.auth-page .text-accent:hover {
+    text-decoration: underline;
+}
+
+/* Landing page specific styles */
+.landing-page {
+    background-color: var(--primary-color);
+    min-height: 100vh;
+}
+
+.hero-section {
+    padding: 100px 20px;
+}
+
+.landing-page .navbar {
+    background: var(--secondary-color);
+    padding: 15px 0;
+}
+
+.btn-custom {
+    background: var(--accent-color);
+    color: var(--text-color);
+    padding: 10px 20px;
+    border-radius: var(--border-radius);
+    transition: background-color 0.3s;
+}
+
+.btn-custom:hover {
+    background: #2563eb;
+    color: var(--text-color);
+}
+
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 12px;
