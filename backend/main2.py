@@ -49,10 +49,10 @@ class Bot:
 
 
     async def check_bot_emails(bot_name: str, bot):
-    """Check emails for a single bot"""
-    # Skip paused bots
-    if bot.paused:
-        return
+        """Check emails for a single bot"""
+        # Skip paused bots
+        if bot.paused:
+            return
 
     if not bot.imap_session:
         log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
