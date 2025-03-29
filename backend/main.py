@@ -160,8 +160,8 @@ def send_verification_email(email: str, code: str):
         raise HTTPException(status_code=500, detail="Failed to send verification email.")
 
 # Serve Static Files and Templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="./static"), name="static")
+templates = Jinja2Templates(directory="./templates")
 
 
 @app.get("/", response_class=HTMLResponse)
