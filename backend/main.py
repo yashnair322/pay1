@@ -225,8 +225,21 @@ def get_cached_user_profile(email: str, timestamp: int):
         SELECT first_name, last_name, email, subscription_status, subscription_plan,
                (SELECT end_date FROM subscriptions WHERE user_email = users.email ORDER BY end_date DESC LIMIT 1) as subscription_end_date
         FROM users WHERE email = %s
-    """, (current_user["email"],))
-    user_data = cursor.fetchone()
+        """, (email,))
+        user_data = cursor.fetchone()
+        return {
+            "first_name": user_data[0],
+            "last_name": user_data[1],
+            "email": user_data[2],
+            "subscription_status": user_data[3],
+            "subscription_plan": user_data[4],
+            "subscription_end_date": user_data[5]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        DatabasePool.return_connection(conn)
     
     return {
         "first_name": user_data[0],
