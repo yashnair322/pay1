@@ -874,7 +874,7 @@ async def toggle_bot(
         state = "paused" if new_paused_state else "resumed"
         return {
             "message": f"Bot '{bot_name}' has been {state}",
-            ""paused": new_paused_state
+            "paused": new_paused_state
         }
     except Exception as e:
         if 'conn' in locals() and conn:
