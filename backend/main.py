@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException, Request, Depends, WebSocket
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
@@ -50,15 +49,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
-# Use connection pooling
+# Get database connection from pool
 from backend.db import DatabasePool
-
-def get_db():
-    conn = DatabasePool.get_connection()
-    try:
-        yield conn
-    finally:
-        DatabasePool.return_connection(conn)
+conn = DatabasePool.get_connection()
+cursor = conn.cursor()
 
 # Ensure required tables exist
 cursor.execute(
@@ -240,7 +234,7 @@ def get_cached_user_profile(email: str, timestamp: int):
     finally:
         cursor.close()
         DatabasePool.return_connection(conn)
-    
+
     return {
         "first_name": user_data[0],
         "last_name": user_data[1],
@@ -257,22 +251,22 @@ async def setup_2fa(current_user: dict = Depends(get_current_user)):
     import qrcode
     import base64
     from io import BytesIO
-    
+
     secret = pyotp.random_base32()
     totp = pyotp.TOTP(secret)
     provisioning_uri = totp.provisioning_uri(current_user["email"], issuer_name="TradeBot")
-    
+
     # Generate QR code
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(provisioning_uri)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    
+
     # Convert QR code to base64
     buffered = BytesIO()
     img.save(buffered, format="PNG")
     qr_code = base64.b64encode(buffered.getvalue()).decode()
-    
+
     # Store secret temporarily (you should implement proper storage)
     return {"qr_code": f"data:image/png;base64,{qr_code}", "secret": secret}
 
@@ -302,7 +296,7 @@ async def verify_payment(payment_data: dict, current_user: dict = Depends(get_cu
             payment_data["payment_id"],
             payment_data["amount"]
         ))
-        
+
         # Update user's subscription status
         cursor.execute("""
             UPDATE users 
@@ -310,7 +304,7 @@ async def verify_payment(payment_data: dict, current_user: dict = Depends(get_cu
                 subscription_plan = %s 
             WHERE email = %s
         """, (payment_data["plan_id"], current_user["email"]))
-        
+
         conn.commit()
         return {"success": True}
     except Exception as e:
@@ -351,7 +345,7 @@ def signup(user: User):
     existing_user = cursor.fetchone()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already exists.")
-    
+
     verification_code = str(random.randint(100000, 999999))
     verification_codes[user.email] = {
         "code": verification_code,
@@ -402,7 +396,7 @@ def reset_password(data: VerifyCode):
         email = payload.get("sub")
         if not email:
             raise HTTPException(status_code=400, detail="Invalid reset token")
-        
+
         hashed_password = get_password_hash(data.code)
         cursor.execute("UPDATE users SET password = %s WHERE email = %s", (hashed_password, email))
         conn.commit()
