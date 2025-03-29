@@ -255,9 +255,11 @@ async def check_bot_emails(bot_name: str, bot):
         return
 
     if not bot.imap_session:
-                log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
-                if not connect_imap(bot):
-                    log_message(bot_name, "⚠️ Failed to reconnect to IMAP, will retry later")
+        log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
+        if not connect_imap(bot):
+            log_message(bot_name, "⚠️ Failed to reconnect to IMAP, will retry later")
+            await asyncio.sleep(5)  # Wait before retrying
+            return
                     await asyncio.sleep(5)  # Wait a bit before trying other bots
                 continue
 
