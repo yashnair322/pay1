@@ -1,3 +1,4 @@
+
 import psycopg2
 from psycopg2 import pool
 import os
@@ -37,9 +38,9 @@ class DatabasePool:
 # Initialize the connection pool
 DatabasePool.initialize()
 
-
 # Function to create users table if it doesn't exist
 def create_users_table():
+    conn = None
     try:
         conn = DatabasePool.get_connection()
         cursor = conn.cursor()
@@ -57,16 +58,17 @@ def create_users_table():
         """)
         conn.commit()
         print("✅ Users table is ready!")
-        DatabasePool.return_connection(conn)
     except Exception as e:
         print(f"❌ Error creating table: {e}")
         if conn:
             conn.rollback()
+    finally:
+        if conn:
             DatabasePool.return_connection(conn)
-
 
 # Function to create subscriptions table if it doesn't exist
 def create_subscriptions_table():
+    conn = None
     try:
         conn = DatabasePool.get_connection()
         cursor = conn.cursor()
@@ -85,16 +87,14 @@ def create_subscriptions_table():
         """)
         conn.commit()
         print("✅ Subscriptions table is ready!")
-        DatabasePool.return_connection(conn)
     except Exception as e:
         print(f"❌ Error creating subscriptions table: {e}")
         if conn:
             conn.rollback()
+    finally:
+        if conn:
             DatabasePool.return_connection(conn)
 
-# Call the functions to ensure tables exist
+# Create tables
 create_users_table()
 create_subscriptions_table()
-
-# Close all connections
-DatabasePool.close_all()
