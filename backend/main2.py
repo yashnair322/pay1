@@ -261,12 +261,8 @@ async def check_bot_emails(bot_name: str, bot):
             await asyncio.sleep(5)  # Wait before retrying
             return
 
-            try:
-                # Check pause state AGAIN before search
-                if bot.paused:
-                    continue
-
-                # Search for unread emails in newest-first order
+    try:
+        # Search for unread emails in newest-first order
                 try:
                     # First try with SORT command which is more reliable for sorting
                     status, messages = bot.imap_session.sort('REVERSE DATE', 'UTF-8', 'UNSEEN')
