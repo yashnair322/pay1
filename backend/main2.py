@@ -48,6 +48,8 @@ class Bot:
     paused: bool = False  # New field to track pause state
 
 
+    async def check_bot_emails(bot_name: str, bot):
+    """Check emails for a single bot"""
     # Skip paused bots
     if bot.paused:
         return
