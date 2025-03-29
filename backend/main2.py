@@ -247,14 +247,14 @@ async def check_email_for_signals():
 
 async def check_bot_emails(bot_name: str, bot):
     """Check emails for a single bot"""
-            # Skip paused bots
-            if bot.paused:
-                # Only log this once in a while to avoid spamming logs
-                if random.random() < 0.01:  # ~1% chance to log
-                    log_message(bot_name, "⏸️ Bot is paused, skipping email check")
-                continue
+    # Skip paused bots
+    if bot.paused:
+        # Only log this once in a while to avoid spamming logs
+        if random.random() < 0.01:  # ~1% chance to log
+            log_message(bot_name, "⏸️ Bot is paused, skipping email check")
+        return
 
-            if not bot.imap_session:
+    if not bot.imap_session:
                 log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
                 if not connect_imap(bot):
                     log_message(bot_name, "⚠️ Failed to reconnect to IMAP, will retry later")
