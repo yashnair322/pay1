@@ -263,9 +263,9 @@ async def check_bot_emails(bot_name: str, bot):
 
     try:
         # Search for unread emails in newest-first order
-                try:
-                    # First try with SORT command which is more reliable for sorting
-                    status, messages = bot.imap_session.sort('REVERSE DATE', 'UTF-8', 'UNSEEN')
+        try:
+            # First try with SORT command which is more reliable for sorting
+            status, messages = bot.imap_session.sort('REVERSE DATE', 'UTF-8', 'UNSEEN')
                 except Exception as e:
                     log_message(bot_name, f"⚠️ SORT command failed, falling back to standard search: {str(e)}")
                     # Fallback to basic search without date sorting (IMAP servers without SORT capability)
