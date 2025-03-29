@@ -260,8 +260,6 @@ async def check_bot_emails(bot_name: str, bot):
             log_message(bot_name, "⚠️ Failed to reconnect to IMAP, will retry later")
             await asyncio.sleep(5)  # Wait before retrying
             return
-                    await asyncio.sleep(5)  # Wait a bit before trying other bots
-                continue
 
             try:
                 # Check pause state AGAIN before search
