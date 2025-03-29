@@ -1,11 +1,11 @@
-
 modules = ["web", "python-3.12"]
+run = "uvicorn undefined:app --host 0.0.0.0 --port 3000"
 
 [nix]
 channel = "stable-24_05"
 
 [deployment]
-run = ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port 5000"]
+run = ["sh", "-c", "uvicorn undefined:app --host 0.0.0.0 --port 3000"]
 
 [workflows]
 runButton = "Run App"
@@ -17,8 +17,8 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uvicorn backend.main:app --host 0.0.0.0 --port 5000 --workers 1 --limit-max-requests 10000 --timeout-keep-alive 5 --no-access-log"
+args = "uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
 
 [[ports]]
-localPort = 5000
+localPort = 8000
 externalPort = 80

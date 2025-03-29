@@ -1,18 +1,14 @@
 :root {
-    --primary-color: #2c3e50;
-    --secondary-color: #f8f9fa;
-    --accent-color: #00b894;
-    --text-color: #2d3436;
+    --primary-color: #0f172a;
+    --secondary-color: #1e293b;
+    --accent-color: #3b82f6;
+    --text-color: #f8fafc;
     --border-radius: 8px;
-    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    --success-color: #00b894;
-    --danger-color: #ff7675;
-    --warning-color: #fdcb6e;
-    --info-color: #74b9ff;
+    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 body {
-    background-color: #f0f2f5;
+    background-color: #f8f9fa;
     font-family: 'Inter', sans-serif;
     margin: 0;
     padding: 0;
@@ -473,64 +469,6 @@ pre#logs {
 
 /* Action badges */
 .action-badge {
-
-/* Auth pages specific styles */
-.auth-page {
-    background-color: var(--primary-color);
-    color: var(--text-color);
-    min-height: 100vh;
-}
-
-.auth-page .form-container {
-    background: var(--secondary-color);
-    max-width: 500px;
-    margin: 50px auto;
-    padding: 30px;
-    border-radius: var(--border-radius);
-    box-shadow: var(--card-shadow);
-}
-
-.auth-page .form-label {
-    color: var(--text-color);
-}
-
-.auth-page .text-accent {
-    color: var(--accent-color);
-    text-decoration: none;
-}
-
-.auth-page .text-accent:hover {
-    text-decoration: underline;
-}
-
-/* Landing page specific styles */
-.landing-page {
-    background-color: var(--primary-color);
-    min-height: 100vh;
-}
-
-.hero-section {
-    padding: 100px 20px;
-}
-
-.landing-page .navbar {
-    background: var(--secondary-color);
-    padding: 15px 0;
-}
-
-.btn-custom {
-    background: var(--accent-color);
-    color: var(--text-color);
-    padding: 10px 20px;
-    border-radius: var(--border-radius);
-    transition: background-color 0.3s;
-}
-
-.btn-custom:hover {
-    background: #2563eb;
-    color: var(--text-color);
-}
-
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 12px;

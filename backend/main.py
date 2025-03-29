@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, HTTPException, Request, Depends, WebSocket
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
@@ -28,17 +29,6 @@ load_dotenv()
 app = FastAPI()
 app.include_router(router)
 
-# Add security headers middleware
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
-    return response
-
 # Store verification codes temporarily
 verification_codes = {}
 
@@ -49,9 +39,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
-# Get database connection from pool
-from backend.db import DatabasePool
-conn = DatabasePool.get_connection()
+# Database Connection
+DATABASE_URL = os.getenv("DATABASE_URL")
+conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
 # Ensure required tables exist
@@ -202,74 +192,6 @@ def reset_password(request: Request):
 def subscription_page(request: Request):
     return templates.TemplateResponse("subscription.html", {"request": request})
 
-@app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request):
-    return templates.TemplateResponse("settings.html", {"request": request})
-
-from fastapi.responses import JSONResponse
-from functools import lru_cache
-from datetime import datetime, timedelta
-
-@lru_cache(maxsize=1000)
-def get_cached_user_profile(email: str, timestamp: int):
-    conn = DatabasePool.get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-        SELECT first_name, last_name, email, subscription_status, subscription_plan,
-               (SELECT end_date FROM subscriptions WHERE user_email = users.email ORDER BY end_date DESC LIMIT 1) as subscription_end_date
-        FROM users WHERE email = %s
-        """, (email,))
-        user_data = cursor.fetchone()
-        return {
-            "first_name": user_data[0],
-            "last_name": user_data[1],
-            "email": user_data[2],
-            "subscription_status": user_data[3],
-            "subscription_plan": user_data[4],
-            "subscription_end_date": user_data[5]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cursor.close()
-        DatabasePool.return_connection(conn)
-
-    return {
-        "first_name": user_data[0],
-        "last_name": user_data[1],
-        "email": user_data[2],
-        "subscription_status": user_data[3],
-        "subscription_plan": user_data[4],
-        "subscription_end_date": user_data[5]
-    }
-
-@app.post("/api/2fa/setup")
-async def setup_2fa(current_user: dict = Depends(get_current_user)):
-    # Generate 2FA secret and QR code
-    import pyotp
-    import qrcode
-    import base64
-    from io import BytesIO
-
-    secret = pyotp.random_base32()
-    totp = pyotp.TOTP(secret)
-    provisioning_uri = totp.provisioning_uri(current_user["email"], issuer_name="TradeBot")
-
-    # Generate QR code
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(provisioning_uri)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-
-    # Convert QR code to base64
-    buffered = BytesIO()
-    img.save(buffered, format="PNG")
-    qr_code = base64.b64encode(buffered.getvalue()).decode()
-
-    # Store secret temporarily (you should implement proper storage)
-    return {"qr_code": f"data:image/png;base64,{qr_code}", "secret": secret}
-
 @app.get("/check-subscription-status")
 async def check_subscription_status(current_user: dict = Depends(get_current_user)):
     # For now, returning mock data. You'll need to implement actual subscription check logic
@@ -296,7 +218,7 @@ async def verify_payment(payment_data: dict, current_user: dict = Depends(get_cu
             payment_data["payment_id"],
             payment_data["amount"]
         ))
-
+        
         # Update user's subscription status
         cursor.execute("""
             UPDATE users 
@@ -304,7 +226,7 @@ async def verify_payment(payment_data: dict, current_user: dict = Depends(get_cu
                 subscription_plan = %s 
             WHERE email = %s
         """, (payment_data["plan_id"], current_user["email"]))
-
+        
         conn.commit()
         return {"success": True}
     except Exception as e:
@@ -345,7 +267,7 @@ def signup(user: User):
     existing_user = cursor.fetchone()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already exists.")
-
+    
     verification_code = str(random.randint(100000, 999999))
     verification_codes[user.email] = {
         "code": verification_code,
@@ -396,7 +318,7 @@ def reset_password(data: VerifyCode):
         email = payload.get("sub")
         if not email:
             raise HTTPException(status_code=400, detail="Invalid reset token")
-
+        
         hashed_password = get_password_hash(data.code)
         cursor.execute("UPDATE users SET password = %s WHERE email = %s", (hashed_password, email))
         conn.commit()
@@ -408,12 +330,4 @@ def reset_password(data: VerifyCode):
 # Start the FastAPI application
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=5000,
-        reload=True,
-        workers=1,
-        limit_concurrency=100,
-        timeout_keep_alive=5
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

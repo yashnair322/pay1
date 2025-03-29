@@ -1,8 +1,6 @@
 
-from fastapi import Depends, HTTPException, Security, Request
+from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from backend.security import check_rate_limit, record_session, encrypt_data, decrypt_data, JWTBearer
-from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -81,9 +79,6 @@ def get_current_user(request: Request):
 # Authentication Route: Login
 def login_user(form_data: OAuth2PasswordRequestForm) -> dict:
     """Authenticate user and return JWT token."""
-    # Check rate limiting
-    check_rate_limit(form_data.username)
-    
     cursor.execute("SELECT email, password, is_verified FROM users WHERE email = %s", (form_data.username,))
     db_user = cursor.fetchone()
 

@@ -15,8 +15,3 @@ websockets
 asyncpg
 razorpay
 stripe
-PyJWT
-PyJWT
-PyJWT
-pyotp
-qrcode
