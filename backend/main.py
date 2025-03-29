@@ -50,10 +50,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
-# Database Connection
-DATABASE_URL = os.getenv("DATABASE_URL")
-conn = psycopg2.connect(DATABASE_URL)
-cursor = conn.cursor()
+# Use connection pooling
+from backend.db import DatabasePool
+
+def get_db():
+    conn = DatabasePool.get_connection()
+    try:
+        yield conn
+    finally:
+        DatabasePool.return_connection(conn)
 
 # Ensure required tables exist
 cursor.execute(
@@ -207,9 +212,16 @@ def subscription_page(request: Request):
 def settings_page(request: Request):
     return templates.TemplateResponse("settings.html", {"request": request})
 
-@app.get("/api/user/profile")
-async def get_user_profile(current_user: dict = Depends(get_current_user)):
-    cursor.execute("""
+from fastapi.responses import JSONResponse
+from functools import lru_cache
+from datetime import datetime, timedelta
+
+@lru_cache(maxsize=1000)
+def get_cached_user_profile(email: str, timestamp: int):
+    conn = DatabasePool.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
         SELECT first_name, last_name, email, subscription_status, subscription_plan,
                (SELECT end_date FROM subscriptions WHERE user_email = users.email ORDER BY end_date DESC LIMIT 1) as subscription_end_date
         FROM users WHERE email = %s
