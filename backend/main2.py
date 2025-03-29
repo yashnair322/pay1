@@ -37,7 +37,6 @@ bot_logs = {}
 # Active bots dictionary
 active_bots: Dict[str, 'Bot'] = {}
 
-
 @dataclass
 class Bot:
     name: str
@@ -46,74 +45,22 @@ class Bot:
     quantity: float
     position: str = "neutral"
     paused: bool = False  # New field to track pause state
-
-
-    # Skip paused bots
-    if bot.paused:
-        return
-
-    if not bot.imap_session:
-        log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
-        if not connect_imap(bot):
-            log_message(bot_name, "⚠️ Failed to reconnect to IMAP")
-            return
-
-    try:
-        # Select inbox and search for unread messages with internal dates
-        bot.imap_session.select('INBOX')
-        status, messages = bot.imap_session.search(None, '(UNSEEN)')
-        
-        if status != "OK":
-            log_message(bot_name, "⚠️ IMAP search failed.")
-            return
-
-        message_ids = messages[0].split() if isinstance(messages[0], bytes) else messages
-        
-        # Get message dates and sort by internal date
-        dated_messages = []
-        for msg_id in message_ids:
-            try:
-                _, date_data = bot.imap_session.fetch(msg_id, "(INTERNALDATE)")
-                msg_date = imaplib.Internaldate2tuple(date_data[0])
-                dated_messages.append((msg_date, msg_id))
-            except Exception as e:
-                log_message(bot_name, f"⚠️ Error getting message date: {str(e)}")
-                continue
-        
-        # Sort messages by date (oldest first)
-        dated_messages.sort(key=lambda x: x[0])
-        message_ids = [msg_id for _, msg_id in dated_messages]
-        for num in message_ids:
-            if bot.paused:
-                break
-            await process_email(bot, bot_name, num)
-            
-    except Exception as e:
-        log_message(bot_name, f"⚠️ Error checking emails: {str(e)}")
-        reconnect_bot(bot)
-
-    # API fields for standard exchanges
     api_key: str = None
     api_secret: str = None
     account_id: str = None
-
-    # MetaTrader5-specific fields
     login: str = None
     password: str = None
     server: str = None
     slopping: int = None
     deviation: int = None
     magic_number: int = None
-
-    # Email configuration for the bot
     email_address: str = None
     email_password: str = None
     imap_server: str = None
     email_subject: str = None
     imap_session: imaplib.IMAP4_SSL = None
-
-    # Task reference for monitoring
     monitoring_task = None
+
 
 @dataclass
 class TradeSignal:
@@ -474,7 +421,6 @@ async def check_bot_emails(bot_name: str, bot):
                             📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
                             """)
 
-
                             # Mark email as UNSEEN again so it remains unread for the user
                             if bot.imap_session:
                                 try:
@@ -492,7 +438,6 @@ async def check_bot_emails(bot_name: str, bot):
                         📨 Subject: {subject}  
                         📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
                         """)
-
 
                         # Mark email as UNSEEN again so it remains unread for the user
                         if bot.imap_session:
@@ -888,7 +833,7 @@ async def toggle_bot(
             else:
                 log_message(bot_name, "Failed to re-establish IMAP session after resume")
 
-        # Update the database
+        #        # Update the database
         cursor.execute(
             "UPDATE bots SET paused = %s WHERE bot_name = %s",
             (new_paused_state, bot_name)
