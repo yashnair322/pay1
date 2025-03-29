@@ -47,53 +47,6 @@ class Bot:
     position: str = "neutral"
     paused: bool = False  # New field to track pause state
 
-
-    async def check_bot_emails(bot_name: str, bot):
-        """Check emails for a single bot"""
-        # Skip paused bots
-        if bot.paused:
-            return
-
-    if not bot.imap_session:
-        log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
-        if not connect_imap(bot):
-            log_message(bot_name, "⚠️ Failed to reconnect to IMAP")
-            return
-
-    try:
-        # Select inbox and search for unread messages with internal dates
-        bot.imap_session.select('INBOX')
-        status, messages = bot.imap_session.search(None, '(UNSEEN)')
-        
-        if status != "OK":
-            log_message(bot_name, "⚠️ IMAP search failed.")
-            return
-
-        message_ids = messages[0].split() if isinstance(messages[0], bytes) else messages
-        
-        # Get message dates and sort by internal date
-        dated_messages = []
-        for msg_id in message_ids:
-            try:
-                _, date_data = bot.imap_session.fetch(msg_id, "(INTERNALDATE)")
-                msg_date = imaplib.Internaldate2tuple(date_data[0])
-                dated_messages.append((msg_date, msg_id))
-            except Exception as e:
-                log_message(bot_name, f"⚠️ Error getting message date: {str(e)}")
-                continue
-        
-        # Sort messages by date (oldest first)
-        dated_messages.sort(key=lambda x: x[0])
-        message_ids = [msg_id for _, msg_id in dated_messages]
-        for num in message_ids:
-            if bot.paused:
-                break
-            await process_email(bot, bot_name, num)
-            
-    except Exception as e:
-        log_message(bot_name, f"⚠️ Error checking emails: {str(e)}")
-        reconnect_bot(bot)
-
     # API fields for standard exchanges
     api_key: str = None
     api_secret: str = None
@@ -117,11 +70,13 @@ class Bot:
     # Task reference for monitoring
     monitoring_task = None
 
+
 @dataclass
 class TradeSignal:
     action: str
     symbol: str
     quantity: float
+
 
 class BotConfigRequest(BaseModel):
     botName: str
@@ -148,6 +103,7 @@ class BotConfigRequest(BaseModel):
     imapServer: str
     emailSubject: str | None = None
 
+
 def get_db_connection():
     """Get a connection to the PostgreSQL database."""
     try:
@@ -157,8 +113,10 @@ def get_db_connection():
         logging.error(f"Database connection error: {str(e)}")
         raise HTTPException(status_code=500, detail="Could not connect to database")
 
+
 def normalize_symbol(symbol: str) -> str:
     return re.sub(r'\W+', '', symbol.upper())
+
 
 def log_message(bot_name: str, message: str):
     """Log a message for a specific bot."""
@@ -169,6 +127,7 @@ def log_message(bot_name: str, message: str):
     formatted_message = f"[{timestamp}] {message}"
     bot_logs[bot_name].append(formatted_message)
     logging.info(f"Bot {bot_name}: {message}")
+
 
 def connect_imap(bot: Bot):
     """Establish a secure IMAP connection for a bot."""
@@ -190,6 +149,7 @@ def connect_imap(bot: Bot):
         log_message(bot.name, f"⚠️ IMAP connection failed: {str(e)}")
         bot.imap_session = None
         return False
+
 
 def decode_email_subject(subject):
     """Decode email subject line to proper text format.
@@ -231,6 +191,7 @@ def decode_email_subject(subject):
             decoded_parts.append(str(content))
 
     return ''.join(decoded_parts)
+
 
 def get_email_body(msg):
     """Extract the body text from an email message.
@@ -292,232 +253,235 @@ async def check_email_for_signals():
         for bot_name, bot in active_bots.items():
             # Create a task for each bot to check emails concurrently
             tasks.append(asyncio.create_task(check_bot_emails(bot_name, bot)))
-        
+
         # Wait for all tasks to complete
         if tasks:
             await asyncio.gather(*tasks)
-        
+
         # Short sleep to prevent excessive CPU usage
         await asyncio.sleep(check_interval)
 
+
 async def check_bot_emails(bot_name: str, bot):
     """Check emails for a single bot"""
-            # Skip paused bots
+    # Skip paused bots
+    if bot.paused:
+        # Only log this once in a while to avoid spamming logs
+        if random.random() < 0.01:  # ~1% chance to log
+            log_message(bot_name, "⏸️ Bot is paused, skipping email check")
+        return
+
+    if not bot.imap_session:
+        log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
+        if not connect_imap(bot):
+            log_message(bot_name, "⚠️ Failed to reconnect to IMAP, will retry later")
+            await asyncio.sleep(5)  # Wait a bit before trying other bots
+            return
+
+    try:
+        # Check pause state AGAIN before search
+        if bot.paused:
+            return
+
+        # Search for unread emails in newest-first order
+        try:
+            # First try with SORT command which is more reliable for sorting
+            status, messages = bot.imap_session.sort('REVERSE DATE', 'UTF-8', 'UNSEEN')
+        except Exception as e:
+            log_message(bot_name, f"⚠️ SORT command failed, falling back to standard search: {str(e)}")
+            # Fallback to basic search without date sorting (IMAP servers without SORT capability)
+            status, messages = bot.imap_session.search(None, "(UNSEEN)")
+
+        if status != "OK":
+            log_message(bot_name, "⚠️ IMAP search failed.")
+            return
+
+        # Process the message IDs
+        if isinstance(messages[0], bytes):
+            # Handle the standard search result format
+            unread_ids = messages[0].split()
+        else:
+            # Handle the SORT command result format
+            unread_ids = messages
+
+        log_message(bot_name, f"📥 Found {len(unread_ids)} unread emails to process")
+
+        for num in unread_ids:
+            # Check pause state AGAIN before each email
             if bot.paused:
-                # Only log this once in a while to avoid spamming logs
-                if random.random() < 0.01:  # ~1% chance to log
-                    log_message(bot_name, "⏸️ Bot is paused, skipping email check")
+                break
+
+            status, msg_data = bot.imap_session.fetch(num, "(RFC822)")
+
+            if status != "OK" or not msg_data or not msg_data[0]:
+                log_message(bot_name, f"⚠️ Failed to fetch email")
                 continue
 
-            if not bot.imap_session:
-                log_message(bot_name, "⚠️ IMAP session inactive. Reconnecting...")
-                if not connect_imap(bot):
-                    log_message(bot_name, "⚠️ Failed to reconnect to IMAP, will retry later")
-                    await asyncio.sleep(5)  # Wait a bit before trying other bots
+            msg = email.message_from_bytes(msg_data[0][1])
+
+            # Extract subject, date, and body
+            subject = decode_email_subject(msg.get("Subject", ""))
+            date_str = msg.get("Date", "Unknown date")
+
+            # Get email body
+            body = get_email_body(msg)
+            if not body:
+                log_message(bot_name, "⚠️ Could not extract email body. Skipping.")
                 continue
 
-            try:
-                # Check pause state AGAIN before search
-                if bot.paused:
-                    continue
+            # Check for subject match using email_subject from database or symbol
+            should_process = False
+            if bot.email_subject and bot.email_subject.strip():
+                # If email_subject is specified in database, check if it's in the subject
+                if bot.email_subject.lower() in subject.lower():
+                    should_process = True
+                    log_message(bot_name, f"📄 Email subject match found: '{bot.email_subject}'")
+            else:
+                # Fallback to symbol matching if no email_subject is specified
+                normalized_symbol = normalize_symbol(bot.symbol)
+                if normalized_symbol.lower() in subject.lower():
+                    should_process = True
+                    log_message(bot_name, f"📄 Symbol match found in subject: '{normalized_symbol}'")
 
-                # Search for unread emails in newest-first order
-                try:
-                    # First try with SORT command which is more reliable for sorting
-                    status, messages = bot.imap_session.sort('REVERSE DATE', 'UTF-8', 'UNSEEN')
-                except Exception as e:
-                    log_message(bot_name, f"⚠️ SORT command failed, falling back to standard search: {str(e)}")
-                    # Fallback to basic search without date sorting (IMAP servers without SORT capability)
-                    status, messages = bot.imap_session.search(None, "(UNSEEN)")
+            if should_process:
+                log_message(bot_name, f"📄 Processing email body for trading signals...")
 
-                if status != "OK":
-                    log_message(bot_name, "⚠️ IMAP search failed.")
-                    continue
+                # Process the body for buy/sell signals
+                body_lower = body.lower()
 
-                # Process the message IDs
-                if isinstance(messages[0], bytes):
-                    # Handle the standard search result format
-                    unread_ids = messages[0].split()
-                else:
-                    # Handle the SORT command result format
-                    unread_ids = messages
+                # Define the signal based on keywords in the body
+                action = None
+                if re.search(r'\b(buy|demand)\b', body_lower):
+                    action = "buy"
+                    log_message(bot_name, "🔍 BUY signal detected in the email body!")
+                elif re.search(r'\b(sell|supply)\b', body_lower):
+                    action = "sell"
+                    log_message(bot_name, "🔍 SELL signal detected in the email body!")
 
-                log_message(bot_name, f"📥 Found {len(unread_ids)} unread emails to process")
+                if action:
+                    # Check for position conflict
+                    if bot.position != "neutral" and bot.position != action:
+                        log_message(bot_name, f"🔁 Signal conflict detected: Closing '{bot.position}' positions to switch to '{action}'.")
 
-                for num in unread_ids:
-                    # Check pause state AGAIN before each email
-                    if bot.paused:
-                        break
+                        try:
+                            # Close existing position before switching
+                            close_signal = TradeSignal(action="close", symbol=bot.symbol, quantity=bot.quantity)
+                            close_result = await bot_manager.close_position(bot, close_signal)
+                            log_message(bot_name, f"🔒 Closed '{bot.position}' position: {close_result}")
 
-                    status, msg_data = bot.imap_session.fetch(num, "(RFC822)")
+                            # Update position to neutral after closing
+                            bot.position = "neutral"
+                        except Exception as e:
+                            log_message(bot_name, f"❌ Failed to close position: {str(e)}")
+                            continue
 
-                    if status != "OK" or not msg_data or not msg_data[0]:
-                        log_message(bot_name, f"⚠️ Failed to fetch email")
-                        continue
+                    # Create a trade signal
+                    signal = TradeSignal(
+                        action=action,
+                        symbol=bot.symbol,
+                        quantity=bot.quantity
+                    )
 
-                    msg = email.message_from_bytes(msg_data[0][1])
+                    try:
+                        # Execute the trade
+                        log_message(bot_name, f"🚀 Executing {action.upper()} order for {bot.symbol}...")
+                        result = await bot_manager.place_trade(bot, signal)
 
-                    # Extract subject, date, and body
-                    subject = decode_email_subject(msg.get("Subject", ""))
-                    date_str = msg.get("Date", "Unknown date")
-
-                    # Get email body
-                    body = get_email_body(msg)
-                    if not body:
-                        log_message(bot_name, "⚠️ Could not extract email body. Skipping.")
-                        continue
-
-                    # Check for subject match using email_subject from database or symbol
-                    should_process = False
-                    if bot.email_subject and bot.email_subject.strip():
-                        # If email_subject is specified in database, check if it's in the subject
-                        if bot.email_subject.lower() in subject.lower():
-                            should_process = True
-                            log_message(bot_name, f"📄 Email subject match found: '{bot.email_subject}'")
-                    else:
-                        # Fallback to symbol matching if no email_subject is specified
-                        normalized_symbol = normalize_symbol(bot.symbol)
-                        if normalized_symbol.lower() in subject.lower():
-                            should_process = True
-                            log_message(bot_name, f"📄 Symbol match found in subject: '{normalized_symbol}'")
-
-                    if should_process:
-                        log_message(bot_name, f"📄 Processing email body for trading signals...")
-
-                        # Process the body for buy/sell signals
-                        body_lower = body.lower()
-
-                        # Define the signal based on keywords in the body
-                        action = None
-                        if re.search(r'\b(buy|demand)\b', body_lower):
-                            action = "buy"
-                            log_message(bot_name, "🔍 BUY signal detected in the email body!")
-                        elif re.search(r'\b(sell|supply)\b', body_lower):
-                            action = "sell"
-                            log_message(bot_name, "🔍 SELL signal detected in the email body!")
-
-                        if action:
-                            # Check for position conflict
-                            if bot.position != "neutral" and bot.position != action:
-                                log_message(bot_name, f"🔁 Signal conflict detected: Closing '{bot.position}' positions to switch to '{action}'.")
-
-                                try:
-                                    # Close existing position before switching
-                                    close_signal = TradeSignal(action="close", symbol=bot.symbol, quantity=bot.quantity)
-                                    close_result = await bot_manager.close_position(bot, close_signal)
-                                    log_message(bot_name, f"🔒 Closed '{bot.position}' position: {close_result}")
-
-                                    # Update position to neutral after closing
-                                    bot.position = "neutral"
-                                except Exception as e:
-                                    log_message(bot_name, f"❌ Failed to close position: {str(e)}")
-                                    continue
-
-                            # Create a trade signal
-                            signal = TradeSignal(
-                                action=action,
-                                symbol=bot.symbol,
-                                quantity=bot.quantity
-                            )
-
-                            try:
-                                # Execute the trade
-                                log_message(bot_name, f"🚀 Executing {action.upper()} order for {bot.symbol}...")
-                                result = await bot_manager.place_trade(bot, signal)
-
-                                log_message(bot_name, f"""
-                                ✅ Trade executed successfully: {action.upper()} {bot.symbol}
-                                💹 Trade Details:
-                                  - Exchange: {bot.exchange}
-                                  - Symbol: {bot.symbol}
-                                  - Action: {action.upper()}
-                                  - Quantity: {bot.quantity}
-                                📅 Email Date: {date_str}  
-                                📨 Subject: {subject}  
-                                📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
-                                """)
-
-                                # Update bot position
-                                bot.position = action
-
-                                # Mark email as seen since we found and executed a valid signal
-                                if bot.imap_session:
-                                    try:
-                                        bot.imap_session.store(num, '+FLAGS', '\\Seen')
-                                        log_message(bot_name, f"📧 Marked email as seen after successful trade")
-                                    except Exception as e:
-                                        log_message(bot_name, f"⚠️ Failed to mark email as seen: {str(e)}")
-                                        # Try to reconnect
-                                        reconnect_bot(bot)
-
-                            except Exception as e:
-                                log_message(bot_name, f"""
-                                ❌ Trade failed: {str(e)}  
-                                📅 Email Date: {date_str}  
-                                📨 Subject: {subject}  
-                                📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
-                                """)
-
-                                # Mark email as UNSEEN if trade failed
-                                if bot.imap_session:
-                                    try:
-                                        # Remove the \Seen flag to mark as unread again
-                                        bot.imap_session.store(num, '-FLAGS', '\\Seen')
-                                        log_message(bot_name, f"📧 Marked email as UNSEEN again (trade failed)")
-                                    except Exception as e:
-                                        log_message(bot_name, f"⚠️ Failed to mark email as unseen: {str(e)}")
-                                        # Try to reconnect
-                                        reconnect_bot(bot)
-                        else:
-                            log_message(bot_name, f"""
-                            🚫 No valid trade signal found in email.  
-                            📅 Email Date: {date_str}  
-                            📨 Subject: {subject}  
-                            📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
-                            """)
-
-
-                            # Mark email as UNSEEN again so it remains unread for the user
-                            if bot.imap_session:
-                                try:
-                                    # Remove the \Seen flag to mark as unread again
-                                    bot.imap_session.store(num, '-FLAGS', '\\Seen')
-                                    log_message(bot_name, f"📧 Marked email as UNSEEN again (no valid signal)")
-                                except Exception as e:
-                                    log_message(bot_name, f"⚠️ Failed to mark email as unseen: {str(e)}")
-                                    # Try to reconnect
-                                    reconnect_bot(bot)
-                    else:
                         log_message(bot_name, f"""
-                        🚫 Email ignored — Subject mismatch.  
+                        ✅ Trade executed successfully: {action.upper()} {bot.symbol}
+                        💹 Trade Details:
+                          - Exchange: {bot.exchange}
+                          - Symbol: {bot.symbol}
+                          - Action: {action.upper()}
+                          - Quantity: {bot.quantity}
                         📅 Email Date: {date_str}  
                         📨 Subject: {subject}  
                         📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
                         """)
 
+                        # Update bot position
+                        bot.position = action
 
-                        # Mark email as UNSEEN again so it remains unread for the user
+                        # Mark email as seen since we found and executed a valid signal
+                        if bot.imap_session:
+                            try:
+                                bot.imap_session.store(num, '+FLAGS', '\\Seen')
+                                log_message(bot_name, f"📧 Marked email as seen after successful trade")
+                            except Exception as e:
+                                log_message(bot_name, f"⚠️ Failed to mark email as seen: {str(e)}")
+                                # Try to reconnect
+                                reconnect_bot(bot)
+
+                    except Exception as e:
+                        log_message(bot_name, f"""
+                        ❌ Trade failed: {str(e)}  
+                        📅 Email Date: {date_str}  
+                        📨 Subject: {subject}  
+                        📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
+                        """)
+
+                        # Mark email as UNSEEN if trade failed
                         if bot.imap_session:
                             try:
                                 # Remove the \Seen flag to mark as unread again
                                 bot.imap_session.store(num, '-FLAGS', '\\Seen')
-                                log_message(bot_name, f"📧 Marked email as UNSEEN again (subject mismatch)")
+                                log_message(bot_name, f"📧 Marked email as UNSEEN again (trade failed)")
                             except Exception as e:
                                 log_message(bot_name, f"⚠️ Failed to mark email as unseen: {str(e)}")
                                 # Try to reconnect
                                 reconnect_bot(bot)
+                else:
+                    log_message(bot_name, f"""
+                    🚫 No valid trade signal found in email.  
+                    📅 Email Date: {date_str}  
+                    📨 Subject: {subject}  
+                    📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
+                    """)
 
-                    # If there's an error with the IMAP session, break and try to reconnect
-                    if not bot.imap_session:
-                        log_message(bot_name, "⚠️ IMAP session lost during processing")
+
+                    # Mark email as UNSEEN again so it remains unread for the user
+                    if bot.imap_session:
+                        try:
+                            # Remove the \Seen flag to mark as unread again
+                            bot.imap_session.store(num, '-FLAGS', '\\Seen')
+                            log_message(bot_name, f"📧 Marked email as UNSEEN again (no valid signal)")
+                        except Exception as e:
+                            log_message(bot_name, f"⚠️ Failed to mark email as unseen: {str(e)}")
+                            # Try to reconnect
+                            reconnect_bot(bot)
+            else:
+                log_message(bot_name, f"""
+                🚫 Email ignored — Subject mismatch.  
+                📅 Email Date: {date_str}  
+                📨 Subject: {subject}  
+                📝 Body: {body[:500]}{'...' if len(body) > 500 else ''}
+                """)
+
+
+                # Mark email as UNSEEN again so it remains unread for the user
+                if bot.imap_session:
+                    try:
+                        # Remove the \Seen flag to mark as unread again
+                        bot.imap_session.store(num, '-FLAGS', '\\Seen')
+                        log_message(bot_name, f"📧 Marked email as UNSEEN again (subject mismatch)")
+                    except Exception as e:
+                        log_message(bot_name, f"⚠️ Failed to mark email as unseen: {str(e)}")
+                        # Try to reconnect
                         reconnect_bot(bot)
-                        break
 
-            except Exception as e:
-                log_message(bot_name, f"⚠️ Email check failed: {str(e)}")
-                bot.imap_session = None
+            # If there's an error with the IMAP session, break and try to reconnect
+            if not bot.imap_session:
+                log_message(bot_name, "⚠️ IMAP session lost during processing")
+                reconnect_bot(bot)
+                break
 
-        await asyncio.sleep(1)
+    except Exception as e:
+        log_message(bot_name, f"⚠️ Email check failed: {str(e)}")
+        bot.imap_session = None
+
+    await asyncio.sleep(1)
+
+
 
 async def keep_imap_alive():
     """Keep each bot's IMAP session alive."""
@@ -550,6 +514,7 @@ async def keep_imap_alive():
             logging.error(f"Error in keep_imap_alive: {str(e)}")
             await asyncio.sleep(60)  # Shorter sleep on error
 
+
 def reconnect_bot(bot):
     """Explicitly reconnect a bot's IMAP session."""
     try:
@@ -573,6 +538,7 @@ def reconnect_bot(bot):
         log_message(bot.name, f"❌ Error reconnecting bot: {str(e)}")
         return False
 
+
 @router.on_event("startup")
 async def start_tasks():
     """Initialize tasks that run on application startup."""
@@ -580,6 +546,7 @@ async def start_tasks():
     asyncio.create_task(keep_imap_alive())
     asyncio.create_task(check_email_for_signals())
     asyncio.create_task(startup_check_emails())
+
 
 # Modify the startup_check_emails function to load the paused state
 async def startup_check_emails():
@@ -640,6 +607,7 @@ async def startup_check_emails():
     except Exception as e:
         logging.error(f"Error initializing bots on startup: {str(e)}")
 
+
 async def get_current_user(authorization: str = Header(None)):
     """Extract user from the Authorization header."""
     if not authorization or not authorization.startswith("Bearer "):
@@ -661,19 +629,20 @@ async def get_current_user(authorization: str = Header(None)):
         logging.error(f"❌ JWT Error: {str(e)}")
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
+
 @router.post("/create-bot")
 async def create_bot(
-    config: BotConfigRequest, 
+    config: BotConfigRequest,
     current_user: dict = Depends(get_current_user)
 ):
     """Create a trading bot and save to the database with user email."""
     try:
         user_email = current_user["email"]
-        
+
         # Check subscription status
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # Check if subscription is active
         cursor.execute("SELECT subscription_status FROM users WHERE email = %s", (user_email,))
         subscription_result = cursor.fetchone()
@@ -683,16 +652,16 @@ async def create_bot(
                 status_code=403,
                 content={"detail": "Please activate a subscription plan first"}
             )
-            
+
         # Count existing bots for this user
         cursor.execute("SELECT COUNT(*) FROM bots WHERE user_email = %s", (user_email,))
         bot_count = cursor.fetchone()[0]
-        
+
         # Get user's current plan (assuming free if not specified)
         cursor.execute("SELECT subscription_plan FROM users WHERE email = %s", (user_email,))
         plan_result = cursor.fetchone()
         current_plan = plan_result[0] if plan_result and plan_result[0] else "free"
-        
+
         # Check bot limit
         from backend.payment import SUBSCRIPTION_PLANS
         if bot_count >= SUBSCRIPTION_PLANS[current_plan]["bot_limit"]:
@@ -706,7 +675,7 @@ async def create_bot(
 
         # Create a database connection
         conn = get_db_connection()
-        cursor = conn.cursor() #Use a regular cursor here
+        cursor = conn.cursor()  # Use a regular cursor here
 
         # Check if bot name already exists
         cursor.execute("SELECT bot_name FROM bots WHERE bot_name = %s", (config.botName,))
@@ -719,12 +688,15 @@ async def create_bot(
 
         # Validate MetaTrader5 fields if needed
         if config.exchange.lower() == "metatrader5":
-            required_fields = [config.login, config.password, config.server, config.slopping, config.deviation, config.magicNumber]
+            required_fields = [config.login, config.password, config.server, config.slopping, config.deviation,
+                               config.magicNumber]
             if not all(required_fields):
                 conn.close()
                 return JSONResponse(
                     status_code=400,
-                    content={"detail": "MetaTrader5 bot requires login, password, server, slopping, deviation, and magicNumber."}
+                    content={
+                        "detail": "MetaTrader5 bot requires login, password, server, slopping, deviation, and magicNumber."
+                    }
                 )
 
         # Create a temporary bot instance for IMAP connection testing
@@ -813,6 +785,7 @@ async def create_bot(
             content={"detail": f"Failed to create bot: {str(e)}"}
         )
 
+
 # Add a new endpoint to toggle bot pause state
 @router.post("/toggle-bot/{bot_name}")
 async def toggle_bot(
@@ -826,7 +799,7 @@ async def toggle_bot(
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cursor.execute(
-            "SELECT * FROM bots WHERE bot_name = %s AND user_email = %s", 
+            "SELECT * FROM bots WHERE bot_name = %s AND user_email = %s",
             (bot_name, user_email)
         )
         bot_data = cursor.fetchone()
@@ -901,7 +874,7 @@ async def toggle_bot(
         state = "paused" if new_paused_state else "resumed"
         return {
             "message": f"Bot '{bot_name}' has been {state}",
-            "paused": new_paused_state
+            ""paused": new_paused_state
         }
     except Exception as e:
         if 'conn' in locals() and conn:
@@ -944,11 +917,12 @@ async def websocket_logs(websocket: WebSocket, bot_name: str):
     except Exception as e:
         logging.error(f"WebSocket Error: {e}")
     finally:
-                try:
-                    await websocket.close()
-                except Exception:
-                    logging.info(f"WebSocket already closed for bot {bot_name}")
-                logging.info(f"WebSocket connection closed for bot {bot_name}")
+        try:
+            await websocket.close()
+        except Exception:
+            logging.info(f"WebSocket already closed for bot {bot_name}")
+        logging.info(f"WebSocket connection closed for bot {bot_name}")
+
 
 @router.get("/get-bots")
 async def get_bots(current_user: dict = Depends(get_current_user)):
@@ -980,7 +954,8 @@ async def get_bots(current_user: dict = Depends(get_current_user)):
             # Add status information if the bot is active
             if bot_dict["bot_name"] in active_bots:
                 active_bot = active_bots[bot_dict["bot_name"]]
-                bot_dict["status"] = "active" if (active_bot.monitoring_task and not active_bot.monitoring_task.done()) else "stopped"
+                bot_dict["status"] = "active" if (
+                            active_bot.monitoring_task and not active_bot.monitoring_task.done()) else "stopped"
                 bot_dict["position"] = active_bot.position
                 bot_dict["paused"] = active_bot.paused  # Include the paused state
             else:
@@ -995,6 +970,7 @@ async def get_bots(current_user: dict = Depends(get_current_user)):
         if 'conn' in locals() and conn:
             conn.close()
         raise HTTPException(status_code=500, detail=f"Failed to retrieve bots: {str(e)}")
+
 
 @router.get("/status")
 async def status():
